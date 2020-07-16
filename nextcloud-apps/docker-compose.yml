@@ -1,0 +1,65 @@
+version: '3'
+
+services:
+  db:
+    image: mariadb
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    volumes:
+      - db:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+
+  app:
+    image: nextcloud:apache
+    ports:
+      - 8080:80
+    volumes:
+      - nextcloud:/var/www/html
+      - ${APP_PATH}:/var/www/html/custom_apps/${APP_NAME}:ro
+    environment:
+      - VIRTUAL_HOST=${HOSTNAME}
+      - MYSQL_HOST=db
+    depends_on:
+      - db
+    networks:
+      - proxy-tier
+      - default
+
+  proxy:
+    image: jwilder/nginx-proxy
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - certs:/etc/nginx/certs:ro
+      - vhost.d:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    networks:
+      - proxy-tier
+    depends_on:
+      - omgwtfssl
+
+  omgwtfssl:
+    image: paulczar/omgwtfssl
+    restart: "no"
+    volumes:
+      - certs:/certs
+    environment:
+      - SSL_SUBJECT=${HOSTNAME}
+      - CA_SUBJECT=my@example.com
+      - SSL_KEY=/certs/${HOSTNAME}.key
+      - SSL_CSR=/certs/${HOSTNAME}.csr
+      - SSL_CERT=/certs/${HOSTNAME}.crt
+    networks:
+      - proxy-tier
+
+volumes:
+  db:
+  nextcloud:
+  certs:
+  vhost.d:
+  html:
+
+networks:
+  proxy-tier:
